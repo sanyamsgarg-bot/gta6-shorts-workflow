@@ -1,0 +1,99 @@
+name: GTA 6 Viral Faceless Shorts & Reels Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      stream_url:
+        description: "YouTube GTA 6 Stream or VOD URL to clip"
+        required: true
+        type: string
+      max_clips:
+        description: "Maximum number of 30-45s vertical clips to generate"
+        required: false
+        default: "3"
+        type: string
+      min_duration:
+        description: "Minimum clip duration in seconds (30-45s target)"
+        required: false
+        default: "30"
+        type: string
+      max_duration:
+        description: "Maximum clip duration in seconds (30-45s target)"
+        required: false
+        default: "45"
+        type: string
+      layout_mode:
+        description: "Faceless 9:16 crop mode (blur_fill_action or center_zoom_faceless)"
+        required: false
+        default: "blur_fill_action"
+        type: choice
+        options:
+          - blur_fill_action
+          - center_zoom_faceless
+      tts_voice:
+        description: "Edge-TTS neural voice for transformative commentary"
+        required: false
+        default: "en-US-ChristopherNeural"
+        type: string
+
+  schedule:
+    - cron: "0 */12 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build-faceless-shorts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install System Media Dependencies (FFmpeg & Fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libass-dev fonts-montserrat fonts-dejavu-core
+
+      - name: Install Python Clipping & AI Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yt-dlp faster-whisper edge-tts google-genai openai numpy pillow
+
+      - name: Run Viral Detection & Faceless Vertical Render Pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STREAM_URL: ${{ inputs.stream_url }}
+          CHANNEL_URLS: ${{ vars.CHANNEL_URLS }}
+          MAX_CLIPS: ${{ inputs.max_clips || '3' }}
+          MIN_DURATION: ${{ inputs.min_duration || '30' }}
+          MAX_DURATION: ${{ inputs.max_duration || '45' }}
+          LAYOUT_MODE: ${{ inputs.layout_mode || 'blur_fill_action' }}
+          TTS_VOICE: ${{ inputs.tts_voice || 'en-US-ChristopherNeural' }}
+        run: |
+          python gta6_shorts_pipeline.py \
+            --url "${STREAM_URL}" \
+            --max-clips "${MAX_CLIPS}" \
+            --min-duration "${MIN_DURATION}" \
+            --max-duration "${MAX_DURATION}" \
+            --layout "${LAYOUT_MODE}" \
+            --voice "${TTS_VOICE}" \
+            --output-dir "output_shorts"
+
+      - name: Upload Rendered 9:16 Shorts & Publishing Manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: gta6-faceless-shorts-${{ github.run_number }}
+          path: |
+            output_shorts/*.mp4
+            output_shorts/*.ass
+            output_shorts/publishing_manifest.json
+          retention-days: 14
